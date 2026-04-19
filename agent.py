@@ -6,7 +6,7 @@ import json
 def call_lpi_tool(tool_name, query):
     try:
         process = subprocess.Popen(
-            ["node", "dist/test-client.js"],
+            ["node", "lpi-developer-kit/dist/test-client.js"],  # FIXED PATH
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -26,10 +26,21 @@ def call_lpi_tool(tool_name, query):
         process.stdin.write(json.dumps(request) + "\n")
         process.stdin.flush()
 
-        output = process.stdout.readline()
-        process.kill()
+        stdout, stderr = process.communicate(timeout=10)
 
-        return output
+        print("RAW STDOUT:", stdout)   # DEBUG
+        print("RAW STDERR:", stderr)   # DEBUG
+
+        if stdout.strip():
+            try:
+                parsed = json.loads(stdout)
+                if "result" in parsed:
+                    return str(parsed["result"])
+                return str(parsed)
+            except:
+                return stdout
+
+        return "No output received"
 
     except Exception as e:
         return f"Error calling {tool_name}: {str(e)}"
