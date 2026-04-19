@@ -1,5 +1,6 @@
 # agents.py
 import os
+import json
 import arxiv
 from dotenv import load_dotenv
 from langchain_community.tools import WikipediaQueryRun
@@ -23,45 +24,58 @@ wiki_runner = WikipediaQueryRun(
 )
 
 # =========================
-# LPI TOOL 1 — Wikipedia
+# LPI TOOL 1 — LPI_Wikipedia
+# Queries Wikipedia for general knowledge and definitions.
+# Called via: LPI_Wikipedia.run(query)
 # =========================
-def _lpi_wikipedia_run(query: str) -> dict:
-    """Call the LPI_Wikipedia tool and return structured output."""
+def _lpi_wikipedia_run(query: str) -> str:
+    """
+    LPI_Wikipedia tool handler.
+    Fetches general knowledge from Wikipedia for a given query.
+    Returns a JSON string with tool_name, status, and data.
+    """
     try:
         result = wiki_runner.run(query)
         if not result or result.strip() == "":
             result = "No Wikipedia article found for this query."
-        return {
+        return json.dumps({
             "tool_name": "LPI_Wikipedia",
             "status": "success",
             "data": result
-        }
+        })
     except Exception as e:
-        return {
+        return json.dumps({
             "tool_name": "LPI_Wikipedia",
             "status": "error",
             "data": f"LPI_Wikipedia failed: {str(e)}"
-        }
+        })
 
+# Register as a named LangChain Tool — name="LPI_Wikipedia"
 LPI_Wikipedia = Tool(
     name="LPI_Wikipedia",
     func=_lpi_wikipedia_run,
     description=(
-        "LPI tool that queries Wikipedia for general knowledge and definitions. "
+        "LPI tool 1: queries Wikipedia for general knowledge and definitions. "
         "Input: a search query string. "
-        "Output: a structured dict with tool_name, status, and data."
+        "Output: JSON string with tool_name='LPI_Wikipedia', status, and data."
     )
 )
 
 # =========================
-# LPI TOOL 2 — Arxiv
+# LPI TOOL 2 — LPI_Arxiv
+# Queries Arxiv for research papers and technical insights.
+# Called via: LPI_Arxiv.run(query)
 # =========================
-def _lpi_arxiv_run(query: str, max_results: int = 3) -> dict:
-    """Call the LPI_Arxiv tool and return structured output."""
+def _lpi_arxiv_run(query: str) -> str:
+    """
+    LPI_Arxiv tool handler.
+    Fetches research papers from Arxiv for a given query.
+    Returns a JSON string with tool_name, status, and list of papers.
+    """
     try:
         search = arxiv.Search(
             query=query,
-            max_results=max_results,
+            max_results=3,
             sort_by=arxiv.SortCriterion.Relevance,
         )
         papers = []
@@ -73,51 +87,46 @@ def _lpi_arxiv_run(query: str, max_results: int = 3) -> dict:
                 "summary": paper.summary[:400],
             })
         if not papers:
-            return {
+            return json.dumps({
                 "tool_name": "LPI_Arxiv",
                 "status": "empty",
                 "data": []
-            }
-        return {
+            })
+        return json.dumps({
             "tool_name": "LPI_Arxiv",
             "status": "success",
             "data": papers
-        }
+        })
     except Exception as e:
-        return {
+        return json.dumps({
             "tool_name": "LPI_Arxiv",
             "status": "error",
             "data": f"LPI_Arxiv failed: {str(e)}"
-        }
+        })
 
+# Register as a named LangChain Tool — name="LPI_Arxiv"
 LPI_Arxiv = Tool(
     name="LPI_Arxiv",
     func=_lpi_arxiv_run,
     description=(
-        "LPI tool that queries Arxiv for research-level insights and papers. "
+        "LPI tool 2: queries Arxiv for research papers and technical insights. "
         "Input: a search query string. "
-        "Output: a structured dict with tool_name, status, and list of paper dicts."
+        "Output: JSON string with tool_name='LPI_Arxiv', status, and list of paper dicts."
     )
 )
 
-# ---- Registered LPI tools ----
+# ---- All registered LPI tools ----
 LPI_TOOLS = [LPI_Wikipedia, LPI_Arxiv]
 
 # =========================
 # SYNTHESIS
 # =========================
-def synthesize(query: str, wiki_result: dict, arxiv_result: dict) -> str:
-    """Combine LPI tool outputs using the LLM."""
+def synthesize(query: str, wiki_data: str, arxiv_data: list) -> str:
+    """Combine LPI_Wikipedia and LPI_Arxiv outputs using the LLM."""
     try:
-        wiki_data = wiki_result.get("data", "No data available.")
-        arxiv_data = arxiv_result.get("data", [])
-
         arxiv_text = ""
-        if isinstance(arxiv_data, list):
-            for i, p in enumerate(arxiv_data, 1):
-                arxiv_text += f"\nPaper {i}: {p['title']}\nSummary: {p['summary']}\n"
-        else:
-            arxiv_text = str(arxiv_data)
+        for i, p in enumerate(arxiv_data, 1):
+            arxiv_text += f"\nPaper {i}: {p['title']}\nSummary: {p['summary']}\n"
 
         prompt = f"""
 You MUST use both sources below.
@@ -138,10 +147,10 @@ COMBINED ANSWER:
 - Must include at least one research insight from Arxiv
 
 WIKIPEDIA CONTRIBUTION:
-- bullet points summarising what Wikipedia provided
+- bullet points summarising what LPI_Wikipedia provided
 
 ARXIV CONTRIBUTION:
-- bullet points with paper references
+- bullet points with paper references from LPI_Arxiv
 
 TOOL TRACE:
 - LPI_Wikipedia → what it provided
@@ -162,19 +171,32 @@ def run_agent(query: str) -> dict:
     print("QUERY:", query)
     print("==============================")
 
-    # --- LPI TOOL 1: Wikipedia ---
-    print("\n[Calling LPI_Wikipedia...]")
-    wiki_result = LPI_Wikipedia.func(query)
+    # --- Call LPI TOOL 1: LPI_Wikipedia ---
+    print("\n[Calling LPI_Wikipedia.run()...]")
+    try:
+        wiki_raw = LPI_Wikipedia.run(query)
+        wiki_result = json.loads(wiki_raw)
+    except Exception as e:
+        wiki_result = {"tool_name": "LPI_Wikipedia", "status": "error", "data": str(e)}
     print(f"LPI_Wikipedia status: {wiki_result.get('status')}")
 
-    # --- LPI TOOL 2: Arxiv ---
-    print("\n[Calling LPI_Arxiv...]")
-    arxiv_result = LPI_Arxiv.func(query)
+    # --- Call LPI TOOL 2: LPI_Arxiv ---
+    print("\n[Calling LPI_Arxiv.run()...]")
+    try:
+        arxiv_raw = LPI_Arxiv.run(query)
+        arxiv_result = json.loads(arxiv_raw)
+    except Exception as e:
+        arxiv_result = {"tool_name": "LPI_Arxiv", "status": "error", "data": str(e)}
     print(f"LPI_Arxiv status: {arxiv_result.get('status')}")
 
     # --- Synthesis ---
     print("\n[Synthesizing with LLM...]")
-    answer = synthesize(query, wiki_result, arxiv_result)
+    wiki_data = wiki_result.get("data", "No data available.")
+    arxiv_data = arxiv_result.get("data", [])
+    if not isinstance(arxiv_data, list):
+        arxiv_data = []
+
+    answer = synthesize(query, wiki_data, arxiv_data)
 
     return {
         "answer": answer,
@@ -183,8 +205,8 @@ def run_agent(query: str) -> dict:
             "LPI_Arxiv": arxiv_result.get("status", "unknown"),
         },
         "sources": {
-            "Wikipedia": str(wiki_result.get("data", ""))[:300],
-            "Arxiv": arxiv_result.get("data", [])
+            "Wikipedia": str(wiki_data)[:300],
+            "Arxiv": arxiv_data
         }
     }
 
@@ -198,15 +220,11 @@ def print_result(result: dict):
     for k, v in result["tool_trace"].items():
         print(f"{k} → {v}")
     print("\n========== SOURCES ==========\n")
-    print("Wikipedia:")
+    print("Wikipedia (LPI_Wikipedia):")
     print(result["sources"]["Wikipedia"])
-    print("\nArxiv Papers:")
-    arxiv_papers = result["sources"]["Arxiv"]
-    if isinstance(arxiv_papers, list):
-        for p in arxiv_papers:
-            print("-", p.get("title", "Unknown"))
-    else:
-        print(arxiv_papers)
+    print("\nArxiv Papers (LPI_Arxiv):")
+    for p in result["sources"]["Arxiv"]:
+        print(f"  - {p.get('title', 'Unknown')} | {p.get('url', '')}")
 
 if __name__ == "__main__":
     try:
