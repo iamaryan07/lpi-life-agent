@@ -1,22 +1,14 @@
-"""
-Track A — Level 3 Agent
-LPI Tools used:
-  1. Wikipedia  (general knowledge)
-  2. Arxiv      (research papers)
-LLM: Anthropic Claude (claude-sonnet-4-20250514) via the Anthropic Python SDK
-"""
+# agent.py
 
 import os
-import textwrap
 import arxiv
-
 from dotenv import load_dotenv
 from langchain_community.tools import WikipediaQueryRun
 from langchain_community.utilities import WikipediaAPIWrapper
 
 load_dotenv()
 
-# ── Llama client ──────────────────────────────────────────────────────────
+# ---- LLM ----
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 
 llm_endpoint = HuggingFaceEndpoint(
@@ -26,163 +18,144 @@ llm_endpoint = HuggingFaceEndpoint(
 
 llm = ChatHuggingFace(llm=llm_endpoint)
 
-# ── Tool 1: Wikipedia ─────────────────────────────────────────────────────────
-wiki_tool = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=1500))
+wiki_tool = WikipediaQueryRun(
+    api_wrapper=WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=1500)
+)
 
+# =========================
+# LPI TOOL 1
+# =========================
+def lpi_wikipedia_tool(query: str):
+    result = wiki_tool.run(query)
+    return {
+        "tool_name": "LPI_Wikipedia",
+        "data": result
+    }
 
-def run_wikipedia(query: str) -> str:
-    """Query Wikipedia and return a plain-text snippet."""
-    try:
-        return wiki_tool.run(query)
-    except Exception as exc:
-        return f"[Wikipedia error: {exc}]"
+# =========================
+# LPI TOOL 2
+# =========================
+def lpi_arxiv_tool(query: str, max_results: int = 3):
+    search = arxiv.Search(
+        query=query,
+        max_results=max_results,
+        sort_by=arxiv.SortCriterion.Relevance,
+    )
 
+    papers = []
+    for paper in search.results():
+        papers.append({
+            "title": paper.title,
+            "authors": [a.name for a in paper.authors[:3]],
+            "url": paper.entry_id,
+            "summary": paper.summary[:400],
+        })
 
-# ── Tool 2: Arxiv ─────────────────────────────────────────────────────────────
-def run_arxiv(query: str, max_results: int = 3) -> list[dict]:
-    """Search Arxiv and return a list of {title, authors, url, summary} dicts."""
-    try:
-        search = arxiv.Search(
-            query=query,
-            max_results=max_results,
-            sort_by=arxiv.SortCriterion.Relevance,
-        )
-        papers = []
-        for paper in search.results():
-            papers.append(
-                {
-                    "title": paper.title,
-                    "authors": [a.name for a in paper.authors[:3]],
-                    "url": paper.entry_id,
-                    "summary": paper.summary[:500],
-                }
-            )
-        return papers
-    except Exception as exc:
-        return [{"title": "Error", "authors": [], "url": "", "summary": str(exc)}]
+    return {
+        "tool_name": "LPI_Arxiv",
+        "data": papers
+    }
 
+# =========================
+# SYNTHESIS
+# =========================
+def synthesize(query, wiki_data, arxiv_data):
 
-def synthesize_with_llama(query: str, wiki_text: str, arxiv_papers: list[dict]) -> str:
-    arxiv_block = ""
-    for i, p in enumerate(arxiv_papers, 1):
-        arxiv_block += f"""
-Paper {i}:
-  Title   : {p['title']}
-  Authors : {', '.join(p['authors'])}
-  URL     : {p['url']}
-  Summary : {p['summary']}
-""".rstrip()
+    arxiv_text = ""
+    for i, p in enumerate(arxiv_data, 1):
+        arxiv_text += f"""
+Paper {i}: {p['title']}
+Summary: {p['summary']}
+"""
 
     prompt = f"""
-You are a research assistant that synthesizes knowledge from multiple sources.
+You MUST use both sources.
 
-You will be given:
-- SOURCE 1: Wikipedia (general knowledge)
-- SOURCE 2: Arxiv papers (research insights)
+Question:
+{query}
 
-Rules:
-1. Write a COMBINED ANSWER using BOTH sources
-2. Include at least one concrete insight from Arxiv
-3. Show how research extends or refines the basic definition
-4. Then add:
+Wikipedia:
+{wiki_data}
+
+Arxiv:
+{arxiv_text}
+
+OUTPUT FORMAT:
+
+COMBINED ANSWER:
+- Must integrate both sources
+- Must include at least one research insight
 
 WIKIPEDIA CONTRIBUTION:
 - bullet points
 
 ARXIV CONTRIBUTION:
-- bullet points with paper titles
+- bullet points (with paper references)
 
-Be concise. Do NOT repeat points.
+TOOL TRACE:
+- LPI_Wikipedia → what it provided
+- LPI_Arxiv → what it provided
 
----
-
-Question: {query}
-
-SOURCE 1 (Wikipedia):
-{wiki_text}
-
-SOURCE 2 (Arxiv):
-{arxiv_block}
+Do NOT repeat content.
 """
 
     response = llm.invoke(prompt)
     return response.content
 
+# =========================
+# PIPELINE
+# =========================
+def run_agent(query: str):
 
-def run_agent(query: str) -> dict:
-    """
-    Full pipeline:
-      1. Accept user question
-      2. Query Wikipedia  (LPI Tool 1)
-      3. Query Arxiv      (LPI Tool 2)
-      4. Synthesize with Claude LLM
-      5. Return answer + full source citations
-    """
-    print(f"\n{'='*60}")
-    print(f"QUERY: {query}")
-    print(f"{'='*60}")
+    print("\n==============================")
+    print("QUERY:", query)
+    print("==============================")
 
-    # Step 2 – Wikipedia
-    print("\n[Tool 1 / Wikipedia] Searching …")
-    wiki_result = run_wikipedia(query)
-    print(f"  → Retrieved {len(wiki_result)} characters")
+    # LPI TOOL 1
+    wiki = lpi_wikipedia_tool(query)
+    wiki_text = wiki["data"]
 
-    # Step 3 – Arxiv
-    print("\n[Tool 2 / Arxiv] Searching …")
-    arxiv_results = run_arxiv(query)
-    print(f"  → Retrieved {len(arxiv_results)} papers")
+    # LPI TOOL 2
+    arxiv_res = lpi_arxiv_tool(query)
+    arxiv_data = arxiv_res["data"]
 
-    # Step 4 – LLM synthesis
-    print("\n[LLM / Claude] Synthesizing answer …")
-    answer = synthesize_with_llama(query, wiki_result, arxiv_results)
+    # Synthesis
+    answer = synthesize(query, wiki_text, arxiv_data)
 
-    result = {
-        "query": query,
+    return {
         "answer": answer,
-        "sources": {
-            "Wikipedia": {
-                "tool": "WikipediaQueryRun (langchain-community)",
-                "snippet": wiki_result[:400] + ("…" if len(wiki_result) > 400 else ""),
-            },
-            "Arxiv": {
-                "tool": "arxiv Python SDK",
-                "papers": [
-                    {
-                        "title": p["title"],
-                        "authors": p["authors"],
-                        "url": p["url"],
-                    }
-                    for p in arxiv_results
-                ],
-            },
+        "tool_trace": {
+            "LPI_Wikipedia": "General knowledge and definitions",
+            "LPI_Arxiv": "Research papers and technical insights"
         },
+        "sources": {
+            "Wikipedia": wiki_text[:300],
+            "Arxiv": arxiv_data
+        }
     }
-    return result
 
+# =========================
+# PRINT
+# =========================
+def print_result(result):
 
-def print_result(result: dict) -> None:
-    print(f"\n{'='*60}")
-    print("ANSWER")
-    print(f"{'='*60}")
+    print("\n========== ANSWER ==========\n")
     print(result["answer"])
 
-    print(f"\n{'='*60}")
-    print("SOURCES  (explainability trace)")
-    print(f"{'='*60}")
+    print("\n========== TOOL TRACE ==========\n")
+    for k, v in result["tool_trace"].items():
+        print(f"{k} → {v}")
 
-    wiki = result["sources"]["Wikipedia"]
-    print(f"\n[Wikipedia]  tool: {wiki['tool']}")
-    print(f"  Snippet: {wiki['snippet']}")
+    print("\n========== SOURCES ==========\n")
 
-    arxiv_src = result["sources"]["Arxiv"]
-    print(f"\n[Arxiv]  tool: {arxiv_src['tool']}")
-    for i, p in enumerate(arxiv_src["papers"], 1):
-        print(f"  Paper {i}: {p['title']}")
-        print(f"    Authors : {', '.join(p['authors'])}")
-        print(f"    URL     : {p['url']}")
+    print("Wikipedia:")
+    print(result["sources"]["Wikipedia"])
+
+    print("\nArxiv Papers:")
+    for p in result["sources"]["Arxiv"]:
+        print("-", p["title"])
 
 
 if __name__ == "__main__":
-    query = "What is machine learning?"
-    result = run_agent(query)
-    print_result(result)
+    res = run_agent("What is machine learning?")
+    print_result(res)
