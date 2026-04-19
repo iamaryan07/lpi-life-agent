@@ -33,15 +33,11 @@ This project is built for **Track A — Level 3**, where the goal is to create a
 
 ## LPI Tools Used
 
-1. **WikipediaQueryRun (langchain-community)**  
-   - Retrieves general knowledge and definitions  
+1. LPI_Wikipedia (via WikipediaQueryRun)
+   - Provides general knowledge and definitions
 
-2. **Arxiv Python SDK**  
-   - Retrieves real research papers with:
-     - title  
-     - authors  
-     - summary  
-     - URL  
+2. LPI_Arxiv (via arxiv SDK)
+   - Provides research papers and technical insights
 
 ---
 
