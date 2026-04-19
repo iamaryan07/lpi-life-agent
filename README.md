@@ -1,143 +1,123 @@
-# Explainable Knowledge Agent (LPI) — Level 3
+# LPI Life Agent (Level 3)
 
-An explainable AI agent that answers user queries by combining **general knowledge (Wikipedia)** and **research-level insights (Arxiv)**.
+## Overview
 
-Built for **Track A — Level 3** — a transparent pipeline that uses multiple LPI tools, processes retrieved data, and clearly shows where each part of the answer comes from.
-
----
-
-## 🚀 Features
-
-- **Two Registered LPI Tools**
-  - `LPI_Wikipedia` — general explanations and definitions
-  - `LPI_Arxiv` — research papers and technical insights
-- **Explainable Output** — every answer includes a TOOL TRACE showing which tool contributed what
-- **Full Error Handling** — every tool call and LLM call is wrapped in try/except; the pipeline degrades gracefully
-- **Deterministic Pipeline** — tools are explicitly called in sequence, no unpredictable agent loop behavior
+This project implements a Level 3 agent using the Life Programmable Interface (LPI).
+The agent answers user questions by selecting and calling multiple tools from the LPI sandbox, processing their outputs, and generating a structured response.
 
 ---
 
-## LPI Tools Used
+## Features
 
-| Tool | Registered Name | Source | What It Provides |
-|------|----------------|--------|-----------------|
-| 1 | `LPI_Wikipedia` | Wikipedia API via `WikipediaQueryRun` | General knowledge, definitions, background context |
-| 2 | `LPI_Arxiv` | Arxiv SDK | Top 3 relevant research papers with titles, authors, URLs, summaries |
-
-Both are registered as `langchain.tools.Tool` objects with explicit `name=` fields, making them inspectable and composable.
-
----
-
-## Architecture
-User Query
-│
-├──► LPI_Wikipedia.func(query)   → structured dict (status + data)
-│
-├──► LPI_Arxiv.func(query)       → structured dict (status + papers list)
-│
-└──► LLM Synthesis (Llama-3.2-1B via HuggingFace)
-│
-└──► Structured Answer
-├── COMBINED ANSWER
-├── WIKIPEDIA CONTRIBUTION
-├── ARXIV CONTRIBUTION
-└── TOOL TRACE
+* Multi-tool usage (`smile_overview`, `get_case_studies`)
+* JSON-RPC based communication with LPI
+* Dynamic tool argument handling
+* Output parsing and filtering (healthcare-specific)
+* Structured response generation (summary + analysis)
 
 ---
 
 ## Tech Stack
 
-| Component | Detail |
-|-----------|--------|
-| Language | Python 3 |
-| LLM | `meta-llama/Llama-3.2-1B-Instruct` via HuggingFace |
-| Framework | LangChain |
-| Tool registration | `langchain.tools.Tool` |
-| APIs | Wikipedia API, Arxiv API |
+* Python (agent logic)
+* Node.js (LPI sandbox)
+* Subprocess + JSON-RPC communication
 
 ---
 
-## Installation
+## Setup
+
+### 1. Clone LPI Developer Kit
 
 ```bash
-git clone https://github.com/iamaryan07/lpi-life-agent.git
-cd lpi-life-agent
+git clone https://github.com/iamaryan07/lpi-developer-kit
+cd lpi-developer-kit
+npm install
+npm run build
+```
+
+### 2. Install Python dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-Add a `.env` file with your HuggingFace token:
-HUGGINGFACEHUB_API_TOKEN=your_token_here
-
 ---
 
-## Usage
+## Run the Agent
+
+From the root directory:
 
 ```bash
-python agents.py
+python agent.py
 ```
 
-Or call `run_agent()` directly:
+Example query:
 
-```python
-from agents import run_agent, print_result
-res = run_agent("What is machine learning?")
-print_result(res)
+```text
+How are digital twins used in healthcare?
 ```
 
 ---
 
-## Sample Output
-[Calling LPI_Wikipedia...]
+## How It Works
 
-LPI_Wikipedia status: success
+1. Takes user input
+2. Selects relevant tools:
 
-[Calling LPI_Arxiv...]
+   * `smile_overview`
+   * `get_case_studies`
+3. Starts LPI server via Node.js
+4. Sends JSON-RPC requests
+5. Receives and parses tool responses
+6. Extracts healthcare-relevant case study
+7. Generates final structured answer
 
-LPI_Arxiv status: success
-========== ANSWER ==========
+---
 
-COMBINED ANSWER:
+## Example Output (Simplified)
 
-Machine learning enables systems to learn from data without explicit programming (Wikipedia).
-Recent Arxiv research highlights challenges in model validation and data reliability.
+```
+SMILE Framework (Summary):
+S.M.I.L.E. — Sustainable Methodology...
 
-WIKIPEDIA CONTRIBUTION:
+Case Study (Summary):
+Continuous Patient Twin for Chronic Disease Management
+Industry: Healthcare
 
-Definition and statistical foundation of machine learning
+Analysis:
+SMILE structures digital twin development...
 
-ARXIV CONTRIBUTION:
-
-Paper: DOME — validation standards for ML models
-Paper: Data Sources — reliability challenges in real-world applications
-
-TOOL TRACE:
-
-LPI_Wikipedia → provided background definition and context
-LPI_Arxiv → provided 3 research papers with technical insights
-
+Conclusion:
+Digital twins enable monitoring, prediction, and intervention...
+```
 
 ---
 
 ## Project Structure
-.
-├── agents.py          # Main agent pipeline + LPI tool definitions
-├── HOW_I_DID_IT.md    # Solution write-up and design decisions
-├── README.md          # Project documentation
-└── requirements.txt   # Dependencies
+
+```
+lpi-life-agent/
+│
+├── agent.py
+├── README.md
+├── HOW_I_DID_IT.md
+├── requirements.txt
+└── lpi-developer-kit/
+```
 
 ---
 
-## How This Meets Level 3 Requirements
+## Notes
 
-| Requirement | Status |
-|-------------|--------|
-| Accepts user input | ✅ |
-| Queries at least 2 LPI tools | ✅ `LPI_Wikipedia` + `LPI_Arxiv` |
-| Tools registered as LangChain Tool objects | ✅ |
-| Processes and combines outputs | ✅ |
-| Explainability and source traceability | ✅ TOOL TRACE in every answer |
-| Error handling | ✅ try/except on every tool + LLM call |
-Two things worth noting:
+* Ensure `lpi-developer-kit` is built before running
+* The agent uses the LPI server (`dist/src/index.js`), not the test client
+* Tool outputs are filtered for relevance (healthcare use case)
 
-The filename is now agents.py throughout (your original README said agent.py which didn't match the repo)
-Added the .env setup instruction since people cloning it will need the HuggingFace token — easy thing that often causes confusion for evaluators trying to run your code
+---
+
+## Status
+
+Level 3 implementation complete.
+
+---
