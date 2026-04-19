@@ -1,9 +1,0 @@
-langchain
-langchain-core
-langchain-community
-langchain-huggingface
-
-arxiv
-wikipedia
-
-python-dotenv
