@@ -1,4 +1,4 @@
-print("=== RUNNING UPDATED AGENT ===")
+print("=== RUNNING FINAL AGENT ===")
 
 import subprocess
 import json
@@ -8,19 +8,34 @@ import json
 def call_lpi_tool(tool_name, query):
     try:
         process = subprocess.Popen(
-            ["node", "lpi-developer-kit/dist/test-client.js"],  # FIXED PATH
+            ["node", "dist/src/index.js"],   # ✅ correct server (NOT test-client)
+            cwd="lpi-developer-kit",         # ✅ run inside dev kit
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
 
+        # ---- INIT (required) ----
+        init_msg = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }
+        process.stdin.write(json.dumps(init_msg) + "\n")
+
+        # ---- Choose arguments based on tool ----
+        if tool_name == "get_case_studies":
+            args = {"query": "healthcare digital twin"}
+        else:
+            args = {"query": query}
+
+        # ---- TOOL CALL ----
         request = {
             "jsonrpc": "2.0",
             "method": "tools/call",
             "params": {
                 "name": tool_name,
-                "arguments": {"query": query}
+                "arguments": args   # 🔥 use args instead of {"query": query}
             },
             "id": 1
         }
@@ -30,15 +45,42 @@ def call_lpi_tool(tool_name, query):
 
         stdout, stderr = process.communicate(timeout=10)
 
-        print("RAW STDOUT:", stdout)   # DEBUG
-        print("RAW STDERR:", stderr)   # DEBUG
-
+        # ---- Parse response ----
         if stdout.strip():
             try:
-                parsed = json.loads(stdout)
-                if "result" in parsed:
-                    return str(parsed["result"])
-                return str(parsed)
+                lines = stdout.strip().split("\n")
+
+                for line in reversed(lines):
+                    try:
+                        parsed = json.loads(line)
+
+                        if "result" in parsed:
+                            result = parsed["result"]
+
+                            # 🔥 extract actual text
+                            if isinstance(result, dict) and "content" in result:
+                                content = result["content"]
+                                if isinstance(content, list) and len(content) > 0:
+                                    text = content[0].get("text", "")
+
+                                    # 🔥 Extract healthcare section only
+                                    if tool_name == "get_case_studies":
+                                        if "Healthcare" in text or "health" in text.lower():
+                                            # split into sections
+                                            parts = text.split("## ")
+                                            for part in parts:
+                                                if "Healthcare" in part or "health" in part.lower():
+                                                    return "## " + part[:800]   # return relevant section only
+
+                                    return text
+
+                            return str(result)
+
+                    except:
+                        continue
+
+                return stdout
+
             except:
                 return stdout
 
@@ -48,29 +90,15 @@ def call_lpi_tool(tool_name, query):
         return f"Error calling {tool_name}: {str(e)}"
 
 
-# ---- Smart Tool Selection ----
+# ---- Tool Selection (fixed names) ----
 def choose_tools(query):
-    q = query.lower()
-
-    if "health" in q or "hospital" in q:
-        return "smile_overview", "case_study_healthcare"
-
-    elif "manufacturing" in q or "factory" in q:
-        return "smile_overview", "case_study_manufacturing"
-
-    elif "energy" in q:
-        return "smile_overview", "case_study_energy"
-
-    else:
-        # fallback
-        return "smile_overview", "case_study_general"
+    return "smile_overview", "get_case_studies"
 
 
-# ---- Better Processing ----
+# ---- Simple Processing ----
 def extract_key_points(text):
-    # very simple heuristic summarization
     lines = text.split(".")
-    return ". ".join(lines[:3])  # first 3 sentences
+    return text[:400]
 
 
 def process_results(smile_data, case_data, user_query):
@@ -87,12 +115,12 @@ Case Study (Summary):
 {case_summary}
 
 Analysis:
-The SMILE framework provides a structured methodology (phases, lifecycle thinking),
-while the case study demonstrates real-world execution.
+SMILE provides a structured lifecycle for building digital twins,
+while case studies demonstrate real-world implementations.
 
 Conclusion:
-Digital twins are effective when theoretical structure (SMILE)
-is combined with domain-specific implementation (case study).
+Digital twins in healthcare are used for simulation, monitoring,
+and predictive modeling of patient conditions.
 """
 
 
@@ -109,7 +137,7 @@ def run_agent():
     data1 = call_lpi_tool(tool1, user_query)
     data2 = call_lpi_tool(tool2, user_query)
 
-    print("Processing...\n")
+    print("\nProcessing...\n")
     final_answer = process_results(data1, data2, user_query)
 
     print("----- FINAL ANSWER -----\n")
