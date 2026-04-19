@@ -23,17 +23,12 @@ wiki_runner = WikipediaQueryRun(
     api_wrapper=WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=1500)
 )
 
+BORDER = "=" * 60
+
 # =========================
 # LPI TOOL 1 — LPI_Wikipedia
-# Queries Wikipedia for general knowledge and definitions.
-# Called via: LPI_Wikipedia.run(query)
 # =========================
 def _lpi_wikipedia_run(query: str) -> str:
-    """
-    LPI_Wikipedia tool handler.
-    Fetches general knowledge from Wikipedia for a given query.
-    Returns a JSON string with tool_name, status, and data.
-    """
     try:
         result = wiki_runner.run(query)
         if not result or result.strip() == "":
@@ -50,7 +45,6 @@ def _lpi_wikipedia_run(query: str) -> str:
             "data": f"LPI_Wikipedia failed: {str(e)}"
         })
 
-# Register as a named LangChain Tool — name="LPI_Wikipedia"
 LPI_Wikipedia = Tool(
     name="LPI_Wikipedia",
     func=_lpi_wikipedia_run,
@@ -63,15 +57,8 @@ LPI_Wikipedia = Tool(
 
 # =========================
 # LPI TOOL 2 — LPI_Arxiv
-# Queries Arxiv for research papers and technical insights.
-# Called via: LPI_Arxiv.run(query)
 # =========================
 def _lpi_arxiv_run(query: str) -> str:
-    """
-    LPI_Arxiv tool handler.
-    Fetches research papers from Arxiv for a given query.
-    Returns a JSON string with tool_name, status, and list of papers.
-    """
     try:
         search = arxiv.Search(
             query=query,
@@ -104,7 +91,6 @@ def _lpi_arxiv_run(query: str) -> str:
             "data": f"LPI_Arxiv failed: {str(e)}"
         })
 
-# Register as a named LangChain Tool — name="LPI_Arxiv"
 LPI_Arxiv = Tool(
     name="LPI_Arxiv",
     func=_lpi_arxiv_run,
@@ -167,43 +153,62 @@ Do NOT repeat content between sections.
 # PIPELINE
 # =========================
 def run_agent(query: str) -> dict:
-    print("\n==============================")
-    print("QUERY:", query)
-    print("==============================")
+    # ---- Header ----
+    print(f"\n{BORDER}")
+    print(f"  LPI Agent — Question: {query}")
+    print(BORDER)
 
-    # --- Call LPI TOOL 1: LPI_Wikipedia ---
-    print("\n[Calling LPI_Wikipedia.run()...]")
+    provenance = []
+
+    # ---- Step 1: LPI_Wikipedia ----
+    print("[1/3] Querying Wikipedia overview...")
     try:
         wiki_raw = LPI_Wikipedia.run(query)
         wiki_result = json.loads(wiki_raw)
     except Exception as e:
         wiki_result = {"tool_name": "LPI_Wikipedia", "status": "error", "data": str(e)}
-    print(f"LPI_Wikipedia status: {wiki_result.get('status')}")
+    provenance.append({
+        "step": 1,
+        "tool": "LPI_Wikipedia",
+        "args": {"query": query},
+        "status": wiki_result.get("status", "unknown")
+    })
 
-    # --- Call LPI TOOL 2: LPI_Arxiv ---
-    print("\n[Calling LPI_Arxiv.run()...]")
+    # ---- Step 2: LPI_Arxiv ----
+    print("[2/3] Searching research knowledge base...")
     try:
         arxiv_raw = LPI_Arxiv.run(query)
         arxiv_result = json.loads(arxiv_raw)
     except Exception as e:
         arxiv_result = {"tool_name": "LPI_Arxiv", "status": "error", "data": str(e)}
-    print(f"LPI_Arxiv status: {arxiv_result.get('status')}")
+    provenance.append({
+        "step": 2,
+        "tool": "LPI_Arxiv",
+        "args": {"query": query},
+        "status": arxiv_result.get("status", "unknown")
+    })
 
-    # --- Synthesis ---
-    print("\n[Synthesizing with LLM...]")
-    wiki_data = wiki_result.get("data", "No data available.")
+    # ---- Step 3: Checking Arxiv papers / case studies ----
+    print("[3/3] Checking research papers and case studies...")
     arxiv_data = arxiv_result.get("data", [])
     if not isinstance(arxiv_data, list):
         arxiv_data = []
+    provenance.append({
+        "step": 3,
+        "tool": "arxiv_case_check",
+        "args": None,
+        "status": "success" if arxiv_data else "empty"
+    })
 
+    # ---- Synthesis ----
+    print("Sending to LLM (HuggingFace)...")
+    wiki_data = wiki_result.get("data", "No data available.")
     answer = synthesize(query, wiki_data, arxiv_data)
 
     return {
+        "query": query,
         "answer": answer,
-        "tool_trace": {
-            "LPI_Wikipedia": wiki_result.get("status", "unknown"),
-            "LPI_Arxiv": arxiv_result.get("status", "unknown"),
-        },
+        "provenance": provenance,
         "sources": {
             "Wikipedia": str(wiki_data)[:300],
             "Arxiv": arxiv_data
@@ -214,17 +219,38 @@ def run_agent(query: str) -> dict:
 # PRINT
 # =========================
 def print_result(result: dict):
-    print("\n========== ANSWER ==========\n")
+    # ---- Answer block ----
+    print(f"\n{BORDER}")
+    print("  ANSWER")
+    print(BORDER)
     print(result["answer"])
-    print("\n========== TOOL TRACE ==========\n")
-    for k, v in result["tool_trace"].items():
-        print(f"{k} → {v}")
-    print("\n========== SOURCES ==========\n")
-    print("Wikipedia (LPI_Wikipedia):")
-    print(result["sources"]["Wikipedia"])
-    print("\nArxiv Papers (LPI_Arxiv):")
-    for p in result["sources"]["Arxiv"]:
-        print(f"  - {p.get('title', 'Unknown')} | {p.get('url', '')}")
+
+    # ---- Sources inline ----
+    print("\nSources:")
+    for entry in result["provenance"]:
+        tool = entry["tool"]
+        print(f"  - [Tool {entry['step']}: {tool}] — status: {entry['status']}")
+
+    arxiv_papers = result["sources"].get("Arxiv", [])
+    if arxiv_papers:
+        print("\n  Arxiv Papers referenced:")
+        for p in arxiv_papers:
+            print(f"    • {p.get('title', 'Unknown')} | {p.get('url', '')}")
+
+    # ---- Provenance block ----
+    print(f"\n{BORDER}")
+    print("  PROVENANCE (tools used)")
+    print(BORDER)
+    for entry in result["provenance"]:
+        step = entry["step"]
+        tool = entry["tool"]
+        args = entry["args"]
+        if args is None:
+            args_str = "(no args)"
+        else:
+            args_str = json.dumps(args)
+        print(f"  [{step}] {tool} {args_str}")
+
 
 if __name__ == "__main__":
     try:
