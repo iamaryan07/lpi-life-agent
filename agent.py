@@ -1,3 +1,5 @@
+print("=== RUNNING UPDATED AGENT ===")
+
 import subprocess
 import json
 
