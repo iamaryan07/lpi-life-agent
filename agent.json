@@ -1,0 +1,81 @@
+{
+  "name": "lpi-life-agent",
+  "description": "An explainable AI agent that answers queries about digital twins by combining SMILE methodology with real-world case studies using the Life Programmable Interface (LPI).",
+  "version": "1.0.0",
+
+  "author": {
+    "name": "Aryan Balhara",
+    "github": "https://github.com/iamaryan07"
+  },
+
+  "capabilities": [
+    "multi-tool reasoning",
+    "structured response generation",
+    "domain-specific filtering",
+    "explainable outputs"
+  ],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "User question related to digital twins or applications"
+      }
+    },
+    "required": ["query"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "answer": {
+        "type": "string",
+        "description": "Structured response including summary, case study, analysis, and conclusion"
+      },
+      "sources": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Tools used to generate the response"
+      }
+    }
+  },
+
+  "tools_used": [
+    {
+      "name": "smile_overview",
+      "role": "Provides conceptual framework (SMILE methodology)"
+    },
+    {
+      "name": "get_case_studies",
+      "role": "Provides real-world implementations filtered for healthcare"
+    }
+  ],
+
+  "workflow": [
+    "Receive user query",
+    "Select relevant tools",
+    "Call LPI tools via JSON-RPC",
+    "Parse nested responses",
+    "Filter healthcare-specific content",
+    "Generate structured output"
+  ],
+
+  "execution": {
+    "type": "local",
+    "entry_point": "agent.py",
+    "requirements": [
+      "Python 3.x",
+      "Node.js",
+      "lpi-developer-kit (built)"
+    ]
+  },
+
+  "notes": [
+    "Uses LPI server (dist/src/index.js), not test client",
+    "Implements manual JSON-RPC communication via subprocess",
+    "Filters irrelevant case studies to improve answer quality"
+  ]
+}
