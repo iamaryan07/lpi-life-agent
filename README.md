@@ -1,127 +1,161 @@
-# Life Optimization Agent (LPI)
+# Explainable Knowledge Agent (LPI)
 
-An explainable AI system that helps users analyze personal productivity, stress, and focus issues using SMILE methodology and LPI tools.
+## Overview
 
-## What It Does
+This project implements a Level 3 agent using the Life Programmable Interface (LPI).
 
-This agent focuses on applying SMILE methodology to real-world human problems like productivity and mental clarity, instead of generic queries. It takes personal challenges like "I feel unproductive and distracted" and provides structured, actionable analysis based on systematic thinking.
+The agent answers user queries by:
 
-## Why It's Unique
+* selecting relevant tools from the LPI
+* retrieving structured knowledge (SMILE methodology + case studies)
+* combining multiple sources
+* generating a structured, explainable response using an LLM (Qwen via Ollama)
 
-- **Applies SMILE to Human Problems**: Uses the digital twin methodology not for technical systems, but for personal optimization challenges like productivity, focus, and stress management
-- **Explainable AI**: Every analysis cites exactly which LPI tools provided which insights, so users can trace the reasoning
-- **Uses Real LPI Tools**: Leverages `query_knowledge` and `get_insights` from the actual LPI MCP server instead of static knowledge bases
-- **Structured Output**: Provides consistent Problem/Analysis/Suggestions format that's practical and actionable
+---
 
-## How to Run
+## Features
 
-### Prerequisites
+* Multi-tool coordination using LPI
+* Query-based tool selection (rule-based logic)
+* JSON-RPC communication with LPI server
+* Context-aware filtering of case studies (healthcare-focused)
+* LLM-based reasoning and response generation
+* Structured output format:
 
-1. **Install Node.js dependencies**:
-   ```bash
-   cd lpi-developer-kit
-   npm run build
-   ```
+  * Understanding
+  * SMILE Phases
+  * Real-World Application
+  * Insight
+  * Conclusion
 
-2. **Start Ollama** (if not already running):
-   ```bash
-   ollama serve
-   ```
-
-3. **Pull the model** (if not already available):
-   ```bash
-   ollama pull qwen2.5:1.5b
-   ```
-
-### Usage
-
-```bash
-python agent.py "your life optimization question"
-```
-
-**Examples**:
-```bash
-python agent.py "I feel unproductive and distracted"
-python agent.py "I struggle with focus during work"
-python agent.py "I'm feeling stressed and overwhelmed"
-```
-
-## Example Input/Output
-
-**Input**:
-```bash
-python agent.py "I feel unproductive and distracted"
-```
-
-**Output**:
-```
-============================================================
-  Life Optimization Agent (LPI)
-  Analyzing: I feel unproductive and distracted
-============================================================
-
-[1/2] Querying knowledge base for relevant patterns...
-[2/2] Getting system insights for analysis...
-
-Extracting key insights from tool outputs...
-Building structured analysis prompt...
-
-Generating analysis with local LLM...
-
-============================================================
-  LIFE OPTIMIZATION ANALYSIS
-============================================================
-
-Problem:
-You're experiencing productivity challenges and difficulty maintaining focus, which is affecting your ability to complete tasks effectively.
-
-Analysis:
-Applying SMILE methodology to your productivity challenge reveals several systemic patterns. From a System Definition perspective, your current work environment and habits form an interconnected system where distractions and productivity influence each other. The Requirements Analysis shows you need a structured approach to identify specific distraction triggers and productivity patterns. The Design phase suggests implementing focused work sessions with clear boundaries, while Implementation requires consistent tracking of your focus patterns. Evaluation should measure both output quality and personal energy levels, not just task completion.
-
-Suggestions:
-1. Implement a 2-hour focus block system: 90 minutes of deep work followed by 30 minutes of review and reset
-2. Track your distraction sources for one week: categorize them as internal (thoughts) vs external (notifications)
-3. Design your environment for success: create physical and digital boundaries during focus periods
-4. Establish a morning routine that sets clear intentions for the day's priorities
-
-Sources:
-[Tool 1: query_knowledge] -> productivity_and_focus_patterns
-[Tool 2: get_insights] -> systemic_patterns
-
-============================================================
-  PROVENANCE (tools used)
-============================================================
-  [1] query_knowledge {"query": "I feel unproductive and distracted"}
-  [2] get_insights {"query": "I feel unproductive and distracted"}
-```
+---
 
 ## Architecture
 
-The agent follows a clear three-step process:
+```text
+User Query
+   ↓
+Tool Selection (rule-based)
+   ↓
+LPI Tools (SMILE + Case Studies)
+   ↓
+Filtering & Parsing
+   ↓
+LLM (Qwen via Ollama)
+   ↓
+Structured Final Answer
+```
 
-1. **Context Gathering**: Queries LPI tools to gather relevant knowledge and insights
-2. **Insight Extraction**: Processes raw tool outputs into structured summaries
-3. **Structured Analysis**: Uses local LLM to generate consistent, actionable advice
+---
 
-## Error Handling
+## Tools Used
 
-The agent includes robust error handling for:
-- MCP server connection issues
-- Ollama connectivity problems
-- Tool output parsing errors
-- Graceful fallback when LLM generation fails
+* `smile_overview` → SMILE framework and methodology
+* `get_case_studies` → real-world digital twin implementations
+* `get_methodology_step` → step-by-step guidance
+* `get_insights` → contextual recommendations
 
-## Dependencies
+---
 
-- Python 3.10+
-- Node.js 18+ (for LPI MCP server)
-- Ollama (local LLM runtime)
-- `requests` Python package
+## Setup Instructions
 
-## Contributing
+### 1. Clone the repository
 
-This agent is designed as a foundation for personal optimization tools. Extensions could include:
-- Integration with calendar and productivity apps
-- Long-term pattern tracking and visualization
-- Personalized recommendation systems
-- Multi-modal input (voice, text, biometric data)
+```bash
+git clone https://github.com/iamaryan07/lpi-life-agent.git
+cd lpi-life-agent
+```
+
+---
+
+### 2. Install dependencies
+
+```bash
+pip install requests
+npm install
+npm run build
+```
+
+---
+
+### 3. Start LPI server
+
+```bash
+node dist/src/index.js
+```
+
+---
+
+### 4. Start Ollama and run model
+
+```bash
+ollama serve
+ollama run qwen2.5:1.5b
+```
+
+---
+
+### 5. Run the agent
+
+```bash
+python agent.py
+```
+
+---
+
+## Example
+
+**Input:**
+
+```text
+How are digital twins used in healthcare?
+```
+
+**Output includes:**
+
+* Explanation of digital twins
+* Relevant SMILE phases
+* Real-world healthcare case study
+* Insight connecting theory and practice
+* Structured conclusion
+
+---
+
+## Design Highlights
+
+* Combines multiple knowledge sources (methodology + real-world data)
+* Uses LLM for reasoning instead of rule-based summaries
+* Applies filtering to improve relevance of case studies
+* Ensures grounded responses by constraining LLM output
+
+---
+
+## Limitations
+
+* Tool selection is rule-based (not fully adaptive)
+* Single-pass reasoning (no iterative refinement)
+* Depends on LLM quality for final output
+
+---
+
+## Future Improvements
+
+* Add reasoning trace for explainability
+* Implement multi-step agent loop
+* Improve error handling and robustness
+* Expand tool coverage for broader queries
+
+---
+
+## Tech Stack
+
+* Python (agent logic)
+* Node.js (LPI server)
+* Ollama (local LLM runtime)
+* Qwen (LLM model)
+
+---
+
+## License
+
+This project is for educational and evaluation purposes.
