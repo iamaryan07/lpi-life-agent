@@ -1,240 +1,45 @@
-# How I Built the LPI Life Agent
+# How I Did It - Level 3
 
-## Step-by-Step Process
+### What I did, step by step
 
-### Phase 1: Understanding the LPI System
+After completing level 2, I moved to Track A and focused on building a real agent instead of just demonstrating tool calls. My goal was to create something that actually answers a meaningful question by combining multiple sources rather than returning raw outputs.
 
-I started by exploring how the LPI (Life Programmable Interface) works. The initial example showed how to connect to tools, but it wasn’t clear how real tool execution happens. I realized that:
+I started by exploring the LPI developer kit and understanding how the MCP-style communication works. The example agent helped me see how subprocess communication and JSON-RPC requests are structured, but it wasn’t immediately clear how real tool execution works beyond the demo.
 
-* The system uses JSON-RPC communication
-* Tools are exposed via a Node.js server
-* Proper initialization (`notifications/initialized`) is required before calling tools
+Then I defined a clear use case instead of keeping it generic. I chose a specific query: “How are digital twins used in healthcare?” This helped me design the agent around combining conceptual understanding and real-world examples.
 
-This phase was mostly about understanding the protocol rather than writing code.
+For tool selection, I intentionally kept it minimal and focused. I used `smile_overview` for methodology and `get_case_studies` for practical implementations. The idea was to combine theory and application instead of relying on a single source.
 
----
+Next, I implemented the MCP connection using Python subprocess. I tested each tool call individually to confirm that the responses were coming back correctly. Initially, I used `test-client.js`, but I realized it only runs demo tests and does not return actual tool outputs. I switched to `dist/src/index.js` and added the required initialization step (`notifications/initialized`) to make real tool calls work.
 
-### Phase 2: Defining the Use Case
+Once tool calls were working, I handled response parsing. The outputs were nested JSON structures, so I extracted the actual content from `result → content → text`. After that, I added logic to filter the case studies so that only healthcare-related content is returned instead of unrelated examples.
 
-Instead of building a generic agent, I focused on a specific query:
-
-> “How are digital twins used in healthcare?”
-
-This helped me design the agent around:
-
-* Conceptual understanding (methodology)
-* Real-world application (case studies)
+Finally, I structured the output into clear sections — SMILE summary, case study summary, analysis, and conclusion — so that the response is readable and explainable instead of just dumping raw text.
 
 ---
 
-### Phase 3: Tool Selection Strategy
+### What problems I hit and how I solved them
 
-Rather than using many tools, I intentionally selected two:
+The first major issue was that tool calls were not returning real data. This happened because I was using `test-client.js`, which only executes predefined test cases. I fixed this by switching to the actual LPI server (`dist/src/index.js`).
 
-* `smile_overview` → provides structured methodology
-* `get_case_studies` → provides real-world implementations
+The second issue was that even after switching, the agent returned empty outputs. This was because I had not sent the initialization message. Once I added the JSON-RPC initialization step, the tool calls started working correctly.
 
-The idea was:
+Another problem was incomplete or empty responses. Initially, I used `readline()` to capture output, which only reads partial data. I replaced it with `process.communicate()` to capture the full response.
 
-> Combine theory + application to produce a meaningful answer
+I also faced an issue where the agent returned irrelevant case studies (like smart buildings instead of healthcare). To fix this, I modified the tool query to `"healthcare digital twin"` and added filtering logic to extract only the relevant section.
 
----
-
-### Phase 4: Fixing Tool Execution
-
-Initially, I used `test-client.js`, which only runs demo tests.
-
-The key fix was:
-
-* Switching to `dist/src/index.js` (actual server)
-* Adding initialization message:
-
-```json
-{"jsonrpc": "2.0", "method": "notifications/initialized"}
-```
-
-Without this, tool calls returned empty results.
+Finally, summarization was breaking structured headings like `# S.M.I.L.E.` because I was splitting text by sentences. I switched to simple truncation (`text[:400]`) to preserve formatting.
 
 ---
 
-### Phase 5: Parsing Tool Output
+### What I learned that I didn't know before
 
-The biggest challenge was handling tool responses.
+I didn’t fully understand how MCP-style communication works before this. Going through the JSON-RPC flow manually — initialization, notifications, and tool calls — made it clear that it’s essentially structured communication over stdin/stdout.
 
-The output format was nested:
+I also realized that connecting tools correctly is more important than the complexity of the agent itself. Most of the work was not in building logic, but in making sure data flows correctly between systems.
 
-```json
-result → content → text
-```
+Another key learning was that raw tool output is not useful by default. Without filtering and structuring, the responses are noisy and hard to interpret. Once I filtered and structured the output, the quality improved significantly.
 
-Instead of treating it as plain text, I extracted:
+I also learned that relevance matters more than volume. Returning fewer but targeted results (like healthcare-specific case studies) is much better than returning everything.
 
-```python
-content[0]["text"]
-```
-
-This allowed me to access actual usable data.
-
----
-
-### Phase 6: Improving Relevance
-
-The `get_case_studies` tool returned multiple industries.
-
-Problem:
-
-* The first case study was often unrelated (e.g., smart buildings)
-
-Solution:
-
-* Modified tool arguments:
-
-  ```python
-  {"query": "healthcare digital twin"}
-  ```
-* Extracted only the healthcare section from the response
-
-This ensured the answer actually matched the user query.
-
----
-
-### Phase 7: Structuring the Output
-
-Instead of dumping raw text, I structured the response into:
-
-* SMILE Framework (Summary)
-* Case Study (Summary)
-* Analysis
-* Conclusion
-
-This made the agent:
-
-* easier to read
-* more explainable
-* aligned with real-world reasoning
-
----
-
-## Problems I Faced
-
-### 1. Wrong Execution Path
-
-Using `test-client.js` resulted in logs instead of real data.
-
-Fix:
-
-* Switched to actual LPI server (`dist/src/index.js`)
-
----
-
-### 2. Missing Initialization
-
-Without sending the initialization message, tool calls silently failed.
-
-Fix:
-
-* Added JSON-RPC initialization before requests
-
----
-
-### 3. Empty or Broken Output
-
-Initially, outputs were empty or incomplete.
-
-Cause:
-
-* Using `readline()` instead of full output read
-
-Fix:
-
-* Switched to `process.communicate()`
-
----
-
-### 4. Irrelevant Case Studies
-
-Tool returned multiple industries.
-
-Fix:
-
-* Filtered for healthcare-specific content
-
----
-
-### 5. Poor Summarization
-
-Splitting by sentences broke headings like `# S.M.I.L.E.`
-
-Fix:
-
-* Switched to simple truncation (`text[:400]`)
-
----
-
-## How I Solved Them
-
-* Read and understood JSON-RPC communication instead of guessing
-* Used proper server instead of test client
-* Implemented structured parsing for nested responses
-* Added domain-specific filtering for relevance
-* Simplified summarization instead of overengineering
-
----
-
-## What I Learned
-
-### Tool Integration Matters More Than Models
-
-The challenge wasn’t AI—it was correctly connecting and using tools.
-
----
-
-### More Data ≠ Better Output
-
-Raw tool output was too large and noisy. Filtering made answers significantly better.
-
----
-
-### Explainability Improves Quality
-
-Structuring output into sections made the agent more understandable and useful.
-
----
-
-### Debugging Is the Real Work
-
-Most time was spent fixing:
-
-* paths
-* protocol issues
-* parsing
-
-Not writing logic.
-
----
-
-### Simplicity Wins
-
-The final agent is simple:
-
-* 2 tools
-* basic parsing
-* structured output
-
-But it works reliably.
-
----
-
-## Final Thoughts
-
-This project was less about building a complex AI system and more about:
-
-* understanding how tools communicate
-* extracting meaningful information
-* presenting it clearly
-
-The biggest takeaway was that a good agent is not defined by complexity, but by:
-
-> how effectively it connects, filters, and explains information.
-
----
+Finally, I understood that simplicity is effective. The final agent only uses two tools with basic parsing and structuring, but it produces reliable and meaningful results.
