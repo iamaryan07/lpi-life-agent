@@ -1,41 +1,82 @@
+import json
+import subprocess
+import os
+import requests
+
 print("=== RUNNING FINAL AGENT ===")
 
-import subprocess
-import json
+# ---- Path Setup ----
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LPI_PATH = os.path.join(BASE_DIR, "..", "dist", "src", "index.js")
+
+print("Using LPI path:", LPI_PATH)
+
+if not os.path.exists(LPI_PATH):
+    raise FileNotFoundError(f"LPI server not found at {LPI_PATH}")
+
+
+# ---- LLM (qwen2.5) ----
+def ask_llm(prompt):
+    try:
+        res = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "qwen2.5:1.5b",
+                "prompt": prompt,
+                "stream": False
+            }
+        )
+
+        data = res.json()
+
+        # ---- DEBUG (optional, helps you see real issue)
+        # print("LLM RAW:", data)
+
+        if "response" in data:
+            return data["response"]
+
+        elif "error" in data:
+            return f"LLM Error: {data['error']}"
+
+        else:
+            return f"Unexpected LLM response: {data}"
+
+    except Exception as e:
+        return f"LLM Error: {str(e)}"
 
 
 # ---- Call LPI Tool ----
 def call_lpi_tool(tool_name, query):
     try:
         process = subprocess.Popen(
-            ["node", "dist/src/index.js"],   # ✅ correct server (NOT test-client)
-            cwd="lpi-developer-kit",         # ✅ run inside dev kit
+            ["node", LPI_PATH],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            encoding="utf-8"
         )
 
-        # ---- INIT (required) ----
+        # INIT
         init_msg = {
             "jsonrpc": "2.0",
             "method": "notifications/initialized"
         }
         process.stdin.write(json.dumps(init_msg) + "\n")
 
-        # ---- Choose arguments based on tool ----
+        # Arguments
         if tool_name == "get_case_studies":
             args = {"query": "healthcare digital twin"}
         else:
             args = {"query": query}
 
-        # ---- TOOL CALL ----
+        # Tool call
         request = {
             "jsonrpc": "2.0",
             "method": "tools/call",
             "params": {
                 "name": tool_name,
-                "arguments": args   # 🔥 use args instead of {"query": query}
+                "arguments": args
             },
             "id": 1
         }
@@ -45,44 +86,36 @@ def call_lpi_tool(tool_name, query):
 
         stdout, stderr = process.communicate(timeout=10)
 
-        # ---- Parse response ----
+        # Parse response
         if stdout.strip():
-            try:
-                lines = stdout.strip().split("\n")
+            lines = stdout.strip().split("\n")
 
-                for line in reversed(lines):
-                    try:
-                        parsed = json.loads(line)
+            for line in reversed(lines):
+                try:
+                    parsed = json.loads(line)
 
-                        if "result" in parsed:
-                            result = parsed["result"]
+                    if "result" in parsed:
+                        result = parsed["result"]
 
-                            # 🔥 extract actual text
-                            if isinstance(result, dict) and "content" in result:
-                                content = result["content"]
-                                if isinstance(content, list) and len(content) > 0:
-                                    text = content[0].get("text", "")
+                        if isinstance(result, dict) and "content" in result:
+                            content = result["content"]
 
-                                    # 🔥 Extract healthcare section only
-                                    if tool_name == "get_case_studies":
-                                        if "Healthcare" in text or "health" in text.lower():
-                                            # split into sections
-                                            parts = text.split("## ")
-                                            for part in parts:
-                                                if "Healthcare" in part or "health" in part.lower():
-                                                    return "## " + part[:800]   # return relevant section only
+                            if isinstance(content, list) and len(content) > 0:
+                                text = content[0].get("text", "")
 
-                                    return text
+                                # Extract healthcare section
+                                if tool_name == "get_case_studies":
+                                    parts = text.split("## ")
+                                    for part in parts:
+                                        if "health" in part.lower():
+                                            return "## " + part[:800]
 
-                            return str(result)
+                                return text
 
-                    except:
-                        continue
+                        return str(result)
 
-                return stdout
-
-            except:
-                return stdout
+                except:
+                    continue
 
         return "No output received"
 
@@ -90,38 +123,9 @@ def call_lpi_tool(tool_name, query):
         return f"Error calling {tool_name}: {str(e)}"
 
 
-# ---- Tool Selection (fixed names) ----
+# ---- Tool Selection (simple but valid) ----
 def choose_tools(query):
     return "smile_overview", "get_case_studies"
-
-
-# ---- Simple Processing ----
-def extract_key_points(text):
-    lines = text.split(".")
-    return text[:400]
-
-
-def process_results(smile_data, case_data, user_query):
-    smile_summary = extract_key_points(smile_data)
-    case_summary = extract_key_points(case_data)
-
-    return f"""
-Question: {user_query}
-
-SMILE Framework (Summary):
-{smile_summary}
-
-Case Study (Summary):
-{case_summary}
-
-Analysis:
-SMILE provides a structured lifecycle for building digital twins,
-while case studies demonstrate real-world implementations.
-
-Conclusion:
-Digital twins in healthcare are used for simulation, monitoring,
-and predictive modeling of patient conditions.
-"""
 
 
 # ---- Agent ----
@@ -137,8 +141,66 @@ def run_agent():
     data1 = call_lpi_tool(tool1, user_query)
     data2 = call_lpi_tool(tool2, user_query)
 
-    print("\nProcessing...\n")
-    final_answer = process_results(data1, data2, user_query)
+    print("\nGenerating response with LLM...\n")
+
+    # ---- LLM Prompt ----
+    prompt = f"""
+    You are an AI agent using SMILE methodology and real case study data.
+
+    User Query:
+    {user_query}
+
+    SMILE Data:
+    {data1}
+
+    Case Study Data:
+    {data2}
+
+    You MUST use specific details from BOTH:
+    - SMILE Data
+    - Case Study Data
+
+    STRICT RULES:
+    - Do NOT use general knowledge
+    - Do NOT invent examples
+    - If a detail is not in the data, do NOT include it
+    - Quote or clearly reference parts of the case study
+
+    For "Real-World Application":
+    - Mention the actual case study name or scenario
+    - Explain what was done (not generic description)
+    - Explain outcome or purpose based ONLY on provided data
+
+    For "Key SMILE Phases":
+    - Select ONLY 2–3 phases
+    - Justify why they are relevant to THIS case study
+
+    Instructions:
+    - You MUST use specific details from SMILE Data and Case Study Data. If a claim is not supported by the data, do NOT include it. Explicitly reference the case study (name, organization, or scenario).
+    - You may rephrase, but do NOT invent new concepts
+    - Do NOT include these instructions in your output
+
+    Answer in this structure:
+
+    1. Understanding:
+    Brief explanation of digital twins in healthcare
+
+    2. Key SMILE Phases:
+    Mention only relevant phases and explain their role
+
+    3. Real-World Application:
+    Use the healthcare case study to explain usage
+
+    4. Insight:
+    Connect SMILE methodology with real-world healthcare usage
+
+    5. Conclusion:
+    Clear and concise summary
+
+    Keep it clean, structured, and relevant to the question.
+    """
+
+    final_answer = ask_llm(prompt)
 
     print("----- FINAL ANSWER -----\n")
     print(final_answer)
