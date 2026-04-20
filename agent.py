@@ -125,7 +125,14 @@ def call_lpi_tool(tool_name, query):
 
 # ---- Tool Selection (simple but valid) ----
 def choose_tools(query):
-    return "smile_overview", "get_case_studies"
+    q = query.lower()
+
+    if "how" in q or "use" in q:
+        return ["smile_overview", "get_case_studies"]
+    elif "implement" in q or "steps" in q:
+        return ["get_methodology_step", "get_insights"]
+    else:
+        return ["query_knowledge", "get_case_studies"]
 
 
 # ---- Agent ----
